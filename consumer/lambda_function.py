@@ -1,12 +1,27 @@
 import json
 import os
 import time
+import socket
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from datetime import datetime
+
+# ==========================================
+# VŨ KHÍ TỐI THƯỢNG: MONKEY PATCHING DNS
+# Ép Python phân giải tên miền HF ra IP Cloudflare cố định, bỏ qua DNS của AWS
+prv_getaddrinfo = socket.getaddrinfo
+
+def new_getaddrinfo(*args, **kwargs):
+    if args[0] == 'api-inference.huggingface.co':
+        # Trả về cấu trúc fake socket trỏ thẳng tới IP 104.18.23.194
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('104.18.23.194', args[1]))]
+    return prv_getaddrinfo(*args, **kwargs)
+
+socket.getaddrinfo = new_getaddrinfo
+# ==========================================
 
 MONGO_URI = os.environ.get('MONGO_URI')
 HF_TOKEN = os.environ.get('HF_TOKEN')
@@ -16,15 +31,11 @@ client = MongoClient(MONGO_URI)
 db = client['horashi-api']
 collection = db['movie']
 
-# --- VŨ KHÍ TỐI THƯỢNG: SESSION & CONNECTION POOLING ---
-# Tạo một session duy nhất, giữ kết nối mạng liên tục (Keep-Alive)
+# Cấu hình Session giữ kết nối liên tục
 session = requests.Session()
-
-# Cấu hình tự động Retry ở tầng thấp (TCP/HTTP)
-# Nếu AWS ngắt mạng hoặc Hugging Face báo lỗi 429 (Too Many Requests), 500, 502, 503, 504... nó sẽ tự động thử lại.
 retry_strategy = Retry(
-    total=5,  # Thử tối đa 5 lần
-    backoff_factor=2,  # Nghỉ 2s, 4s, 8s...
+    total=3,
+    backoff_factor=2,
     status_forcelist=[429, 500, 502, 503, 504],
     allowed_methods=["POST"]
 )
@@ -38,9 +49,9 @@ session.headers.update({
 def get_embedding(text):
     payload = {"inputs": [text]}
     try:
-        # Sử dụng session tái chế, không tạo kết nối mới, miễn nhiễm lỗi DNS
+        # Nhờ có Monkey Patch ở trên, dòng này sẽ chạy mượt mà không bị lỗi Errno -5
         response = session.post(HF_API_URL, json=payload, timeout=20)
-        response.raise_for_status() # Quăng lỗi nếu status code không phải 200 OK
+        response.raise_for_status()
         result = response.json()
         return result[0]
     except Exception as e:
@@ -62,7 +73,7 @@ def lambda_handler(event, context):
         text_to_embed = f"Tên phim: {title}. Nội dung: {overview}"
         
         embedding = get_embedding(text_to_embed)
-        time.sleep(1) # Nghỉ 1 nhịp để tránh bị Rate Limit
+        time.sleep(1) # Nghỉ 1 nhịp để tránh bị Hugging Face Rate Limit
         
         if not embedding:
             raise Exception(f"❌ Không thể lấy Vector cho '{title}'. SQS vui lòng Retry!")
