@@ -10,17 +10,16 @@ from bson.objectid import ObjectId
 from datetime import datetime
 
 # ==========================================
-# VŨ KHÍ TỐI THƯỢNG: MONKEY PATCHING DNS
-# Ép Python phân giải tên miền HF ra IP Cloudflare cố định, bỏ qua DNS của AWS
-prv_getaddrinfo = socket.getaddrinfo
+# VŨ KHÍ TỐI THƯỢNG 1: ÉP PYTHON CHỈ DÙNG IPv4
+# Sửa lỗi [Errno -5] do AWS Lambda cố gọi IPv6 nhưng thất bại
+old_getaddrinfo = socket.getaddrinfo
 
-def new_getaddrinfo(*args, **kwargs):
-    if args[0] == 'api-inference.huggingface.co':
-        # Trả về cấu trúc fake socket trỏ thẳng tới IP 104.18.23.194
-        return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('104.18.23.194', args[1]))]
-    return prv_getaddrinfo(*args, **kwargs)
+def ipv4_getaddrinfo(*args, **kwargs):
+    responses = old_getaddrinfo(*args, **kwargs)
+    # Lọc bỏ AF_INET6 (IPv6), chỉ giữ lại AF_INET (IPv4)
+    return [res for res in responses if res[0] == socket.AF_INET]
 
-socket.getaddrinfo = new_getaddrinfo
+socket.getaddrinfo = ipv4_getaddrinfo
 # ==========================================
 
 MONGO_URI = os.environ.get('MONGO_URI')
@@ -31,7 +30,6 @@ client = MongoClient(MONGO_URI)
 db = client['horashi-api']
 collection = db['movie']
 
-# Cấu hình Session giữ kết nối liên tục
 session = requests.Session()
 retry_strategy = Retry(
     total=3,
@@ -41,15 +39,19 @@ retry_strategy = Retry(
 )
 adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=10, pool_maxsize=10)
 session.mount("https://", adapter)
+
+# VŨ KHÍ TỐI THƯỢNG 2: CẢI TRANG THÀNH TRÌNH DUYỆT BÌNH THƯỜNG
+# Bypass hệ thống Anti-Bot chặn SSL của Cloudflare
 session.headers.update({
     'Authorization': f'Bearer {HF_TOKEN}',
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 })
 
 def get_embedding(text):
     payload = {"inputs": [text]}
     try:
-        # Nhờ có Monkey Patch ở trên, dòng này sẽ chạy mượt mà không bị lỗi Errno -5
+        # Gọi tên miền chuẩn, ép IPv4, giả lập trình duyệt Chrome
         response = session.post(HF_API_URL, json=payload, timeout=20)
         response.raise_for_status()
         result = response.json()
@@ -73,7 +75,7 @@ def lambda_handler(event, context):
         text_to_embed = f"Tên phim: {title}. Nội dung: {overview}"
         
         embedding = get_embedding(text_to_embed)
-        time.sleep(1) # Nghỉ 1 nhịp để tránh bị Hugging Face Rate Limit
+        time.sleep(1.5) # Giãn nhịp tránh Hugging Face Rate Limit
         
         if not embedding:
             raise Exception(f"❌ Không thể lấy Vector cho '{title}'. SQS vui lòng Retry!")
