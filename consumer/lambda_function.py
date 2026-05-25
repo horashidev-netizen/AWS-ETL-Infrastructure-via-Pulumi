@@ -1,6 +1,7 @@
 import json
 import urllib.request
 import os
+import time
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from datetime import datetime
@@ -39,7 +40,6 @@ def lambda_handler(event, context):
         title = body['title']
         overview = body['overview']
         
-        # Trích xuất Genre
         genres_list = json.loads(body.get('genres', '[]'))
         genre_name = genres_list[0]['name'] if len(genres_list) > 0 else "Unknown"
         
@@ -48,10 +48,12 @@ def lambda_handler(event, context):
         # Gọi AI tạo Vector
         embedding = get_embedding(text_to_embed)
         
+        # 2. NGỦ 1 GIÂY ĐỂ TRÁNH BỊ HUGGING FACE KHÓA IP
+        time.sleep(1) 
+        
         if not embedding:
             print(f"❌ Bỏ qua phim '{title}' do lỗi gọi API.")
-            continue
-            
+            continue  
         # Lưu vào MongoDB
         movie_doc = {
             "_id": ObjectId(),

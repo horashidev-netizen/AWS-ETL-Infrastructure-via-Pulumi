@@ -110,6 +110,7 @@ func main() {
 			Handler: pulumi.String("lambda_function.lambda_handler"),
 			Role:    lambdaRole.Arn,
 			Timeout: pulumi.Int(120),
+			MemorySize: pulumi.Int(512),
 			Environment: &lambda.FunctionEnvironmentArgs{
 				Variables: pulumi.StringMap{
 					"MONGO_URI": pulumi.String(mongoUri),
