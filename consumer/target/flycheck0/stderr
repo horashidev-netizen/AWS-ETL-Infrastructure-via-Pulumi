@@ -1,0 +1,10 @@
+    Updating crates.io index
+error: failed to select a version for `reqwest`.
+    ... required by package `consumer v0.1.0 (/Users/horashidev/Downloads/movie_web/infra/aws-etl-infrastructure/consumer)`
+versions that meet the requirements `^0.13.3` are: 0.13.3
+
+package `consumer` depends on `reqwest` with feature `rustls-tls` but `reqwest` does not have that feature.
+ available features: __native-tls, __native-tls-alpn, __rustls, __rustls-aws-lc-rs, __tls, blocking, brotli, charset, cookies, default, default-tls, deflate, form, gzip, hickory-dns, http2, http3, json, multipart, native-tls, native-tls-no-alpn, native-tls-vendored, native-tls-vendored-no-alpn, query, rustls, rustls-no-provider, socks, stream, system-proxy, zstd
+
+
+failed to select a version for `reqwest` which could resolve this conflict

@@ -13,25 +13,27 @@ jobs:
     steps:
       # 1. Kéo code của bạn về máy chủ GitHub
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # 2. Cài đặt Python 3.10
+      # 2. Cài đặt Python (Cần thiết để cài đặt công cụ cargo-lambda nhanh nhất qua pip)
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # 3. Tải thư viện chuẩn Linux cho Lambda (Giải quyết dứt điểm lỗi pymongo)
-      - name: Install Lambda dependencies
+      # 3. Cài đặt Cargo Lambda và Biên dịch dự án Rust sang mã máy (Binary)
+      - name: Install Cargo Lambda & Build Rust
         run: |
+          pip install cargo-lambda
           cd consumer
-          pip install requests pymongo -t .
+          cargo lambda build --release
 
       # 4. Cài đặt môi trường Golang cho Pulumi
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache: true # Bật tính năng cache xịn của v5 để sửa lỗi giải nén tar cũ
 
       # 5. Gọi Pulumi tự động tạo hạ tầng trên AWS
       - name: Pulumi Deploy

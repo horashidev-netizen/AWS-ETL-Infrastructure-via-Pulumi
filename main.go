@@ -105,12 +105,12 @@ func main() {
 		hfToken := conf.Require("hfToken")
 
 		consumerLambda, err := lambda.NewFunction(ctx, "consumerLambda", &lambda.FunctionArgs{
-			Runtime: pulumi.String("python3.10"),
-			Code:    pulumi.NewFileArchive("./consumer"),
-			Handler: pulumi.String("lambda_function.lambda_handler"),
+			Runtime: pulumi.String("provided.al2023"), // OS Linux nguyên thủy, không cần Python
+			Code:    pulumi.NewFileArchive("./consumer/target/lambda/consumer"), // Trỏ tới thư mục chứa file binary sau khi build
+			Handler: pulumi.String("bootstrap"), // File thực thi mặc định của Rust trên Lambda
 			Role:    lambdaRole.Arn,
 			Timeout: pulumi.Int(120),
-			MemorySize: pulumi.Int(512),
+			MemorySize: pulumi.Int(128), // Ép xung RAM về 128MB tiết kiệm tối đa chi phí
 			Environment: &lambda.FunctionEnvironmentArgs{
 				Variables: pulumi.StringMap{
 					"MONGO_URI": pulumi.String(mongoUri),
