@@ -43,7 +43,7 @@ jobs:
           upsert: true
           config-map: |
             aws:region:
-              value: ap-southeast-1
+              value: us-east-1
             mongoUri:
               value: ${{ secrets.MONGO_URI }}
               secret: true
