@@ -1,0 +1,48 @@
+name: Deploy AWS ETL Infrastructure
+
+on:
+  push:
+    branches:
+      - main # Chạy tự động mỗi khi có code đẩy lên nhánh main
+
+jobs:
+  deploy:
+    name: Deploy to AWS via Pulumi
+    runs-on: ubuntu-latest # Dùng môi trường Linux x86_64 chuẩn xác nhất
+
+    steps:
+      # 1. Kéo code của bạn về máy chủ GitHub
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. Cài đặt Python 3.10
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      # 3. Tải thư viện chuẩn Linux cho Lambda (Giải quyết dứt điểm lỗi pymongo)
+      - name: Install Lambda dependencies
+        run: |
+          cd consumer
+          pip install requests pymongo -t .
+
+      # 4. Cài đặt môi trường Golang cho Pulumi
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      # 5. Gọi Pulumi tự động tạo hạ tầng trên AWS
+      - name: Pulumi Deploy
+        uses: pulumi/actions@v4
+        with:
+          command: up
+          stack-name: etl-dev # Chú ý: Đổi tên này nếu stack trên Pulumi Cloud của bạn tên khác
+          work-dir: ./
+        env:
+          # Các biến này sẽ được lấy từ phần Secrets của GitHub
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: "123456" # Đặt mật khẩu bất kỳ để giải mã
