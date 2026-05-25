@@ -1,0 +1,6 @@
+encryptionsalt: v1:aWSu4TC3Eyw=:v1:40fHB5529TxWJGmR:+nAeEr8/hjSB/8R9TYsynSWCQXNm3g==
+config:
+  aws-etl-infrastructure:hfToken:
+    secure: v1:Zd73OVn00tGvhdHj:u28WRvsSuceqfwONZoWrz1pP6RV6ov/XWGvXh1wKeIKS+VwE0vuMdu1S4P+kFZHRGRRQnH8=
+  aws-etl-infrastructure:mongoUri:
+    secure: v1:VDG07wmfaKxUHE+o:RpdjJTmhvIINBaORZQILm0KMjL3NbB3yOgFPuzsKSLJA0k/HQ9ejvBpGTd7HcWaSh4CmhOp8QTVZvVhi3uOKqtMQ+OheOvKEOrpvmydw

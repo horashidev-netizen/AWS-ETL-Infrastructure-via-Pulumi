@@ -1,0 +1,7 @@
+name: aws-etl-infrastructure
+description: etl for database pass to mongodb
+runtime: go
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: aws-go
