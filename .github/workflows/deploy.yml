@@ -41,6 +41,15 @@ jobs:
           stack-name: etl-dev # Chú ý: Đổi tên này nếu stack trên Pulumi Cloud của bạn tên khác
           work-dir: ./
           upsert: true
+          config-map: |
+            aws:region:
+              value: ap-southeast-1
+            mongoUri:
+              value: ${{ secrets.MONGO_URI }}
+              secret: true
+            hfToken:
+              value: ${{ secrets.HF_TOKEN }}
+              secret: true
         env:
           # Các biến này sẽ được lấy từ phần Secrets của GitHub
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
