@@ -120,14 +120,18 @@ func main() {
 		})
 
 		// Gắn Trigger: SQS nhận tin nhắn -> Gọi Lambda 2
-		_, err = lambda.NewEventSourceMapping(ctx, "sqsTrigger", &lambda.EventSourceMappingArgs{
-			EventSourceArn: queue.Arn,
-			FunctionName:   consumerLambda.Arn,
-			BatchSize:      pulumi.Int(5), // Mỗi lần bốc 5 phim để xử lý
-		})
-		if err != nil {
-			return err
-		}
+        _, err = lambda.NewEventSourceMapping(ctx, "sqsTrigger", &lambda.EventSourceMappingArgs{
+            EventSourceArn: queue.Arn,
+            FunctionName:   consumerLambda.Arn,
+            BatchSize:      pulumi.Int(5), // Mỗi lần bốc 5 phim
+            // THÊM ĐOẠN NÀY: Khóa van, chỉ cho phép SQS gọi tối đa 2 Lambda chạy song song
+            ScalingConfig: &lambda.EventSourceMappingScalingConfigArgs{
+                MaximumConcurrency: pulumi.Int(2), 
+            },
+        })
+        if err != nil {
+            return err
+        }
 
 		// Xuất tên Bucket ra màn hình để bạn biết chỗ upload file
 		ctx.Export("bucketName", bucket.ID())
