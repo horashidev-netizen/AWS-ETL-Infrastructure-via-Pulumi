@@ -40,6 +40,7 @@ jobs:
           command: up
           stack-name: etl-dev # Chú ý: Đổi tên này nếu stack trên Pulumi Cloud của bạn tên khác
           work-dir: ./
+          upsert: true
         env:
           # Các biến này sẽ được lấy từ phần Secrets của GitHub
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
