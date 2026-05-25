@@ -1,54 +1,51 @@
 import json
-import urllib.request
 import os
 import time
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from datetime import datetime
 
 MONGO_URI = os.environ.get('MONGO_URI')
 HF_TOKEN = os.environ.get('HF_TOKEN')
-
-# DÙNG IP TRỰC TIẾP ĐỂ BỎ QUA DNS CỦA AWS LAMBDA
-HF_IP_URL = "https://104.18.23.194/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
+HF_API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
 
 client = MongoClient(MONGO_URI)
 db = client['horashi-api']
 collection = db['movie']
 
+# --- VŨ KHÍ TỐI THƯỢNG: SESSION & CONNECTION POOLING ---
+# Tạo một session duy nhất, giữ kết nối mạng liên tục (Keep-Alive)
+session = requests.Session()
+
+# Cấu hình tự động Retry ở tầng thấp (TCP/HTTP)
+# Nếu AWS ngắt mạng hoặc Hugging Face báo lỗi 429 (Too Many Requests), 500, 502, 503, 504... nó sẽ tự động thử lại.
+retry_strategy = Retry(
+    total=5,  # Thử tối đa 5 lần
+    backoff_factor=2,  # Nghỉ 2s, 4s, 8s...
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["POST"]
+)
+adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=10, pool_maxsize=10)
+session.mount("https://", adapter)
+session.headers.update({
+    'Authorization': f'Bearer {HF_TOKEN}',
+    'Content-Type': 'application/json'
+})
+
 def get_embedding(text):
-    payload = json.dumps({"inputs": [text]}).encode('utf-8')
-    
-    # Bắn request tới IP trực tiếp
-    req = urllib.request.Request(HF_IP_URL, data=payload, method='POST')
-    req.add_header('Authorization', f'Bearer {HF_TOKEN}')
-    req.add_header('Content-Type', 'application/json')
-    
-    # ⚠️ BẮT BUỘC: Định danh Host header để Cloudflare nhận diện tên miền
-    req.add_header('Host', 'api-inference.huggingface.co')
-    
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            # Thiết lập cấu hình bỏ qua kiểm tra SSL nghiêm ngặt nếu IP đổi chứng chỉ
-            # (Thư viện urllib mặc định sẽ kiểm tra trùng khớp tên miền trong chứng chỉ)
-            import ssl
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            
-            with urllib.request.urlopen(req, timeout=15, context=ctx) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                return result[0]
-                
-        except Exception as e:
-            print(f"⚠️ Thử lại bằng IP trực tiếp (Lần {attempt+1}/{max_retries}): {e}")
-            if attempt < max_retries - 1:
-                time.sleep(2)
-            else:
-                print("❌ Bó tay hoàn toàn kể cả khi gọi bằng IP!")
-                
-    return None
+    payload = {"inputs": [text]}
+    try:
+        # Sử dụng session tái chế, không tạo kết nối mới, miễn nhiễm lỗi DNS
+        response = session.post(HF_API_URL, json=payload, timeout=20)
+        response.raise_for_status() # Quăng lỗi nếu status code không phải 200 OK
+        result = response.json()
+        return result[0]
+    except Exception as e:
+        print(f"⚠️ Lỗi kết nối API: {e}")
+        return None
 
 def lambda_handler(event, context):
     for record in event['Records']:
@@ -65,10 +62,10 @@ def lambda_handler(event, context):
         text_to_embed = f"Tên phim: {title}. Nội dung: {overview}"
         
         embedding = get_embedding(text_to_embed)
-        time.sleep(1) # Giữ nhịp độ từ tốn
+        time.sleep(1) # Nghỉ 1 nhịp để tránh bị Rate Limit
         
         if not embedding:
-            raise Exception(f"❌ Lỗi kết nối máy chủ khi xử lý '{title}'. Yêu cầu SQS retry!")
+            raise Exception(f"❌ Không thể lấy Vector cho '{title}'. SQS vui lòng Retry!")
             
         movie_doc = {
             "_id": ObjectId(),
@@ -82,6 +79,6 @@ def lambda_handler(event, context):
         }
         
         collection.insert_one(movie_doc)
-        print(f"✅ Đã lưu thành công phim: {title}")
+        print(f"✅ Đã lưu thành công: {title}")
         
     return {'statusCode': 200}

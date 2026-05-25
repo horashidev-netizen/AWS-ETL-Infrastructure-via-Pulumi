@@ -29,9 +29,9 @@ jobs:
 
       # 4. Cài đặt môi trường Golang cho Pulumi
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.22'
 
       # 5. Gọi Pulumi tự động tạo hạ tầng trên AWS
       - name: Pulumi Deploy
