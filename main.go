@@ -110,7 +110,6 @@ func main() {
 			Handler: pulumi.String("lambda_function.lambda_handler"),
 			Role:    lambdaRole.Arn,
 			Timeout: pulumi.Int(120),
-			ReservedConcurrentExecutions: pulumi.Int(1), // TRICK CHỐNG NGHẼN MẠNG: Chỉ chạy 1 luồng
 			Environment: &lambda.FunctionEnvironmentArgs{
 				Variables: pulumi.StringMap{
 					"MONGO_URI": pulumi.String(mongoUri),
