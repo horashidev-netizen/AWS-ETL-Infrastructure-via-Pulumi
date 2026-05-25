@@ -21,14 +21,25 @@ def get_embedding(text):
     req.add_header('Authorization', f'Bearer {HF_TOKEN}')
     req.add_header('Content-Type', 'application/json')
     
-    try:
-        # Tăng timeout lên 15 giây cho chắc ăn
-        with urllib.request.urlopen(req, timeout=15) as response:
-            result = json.loads(response.read().decode('utf-8'))
-            return result[0]
-    except Exception as e:
-        print(f"Lỗi gọi AI: {e}")
-        return None
+    # Kỹ thuật Exponential Backoff: Thử tối đa 5 lần
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            with urllib.request.urlopen(req, timeout=15) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return result[0] # Thành công thì trả về Vector ngay lập tức
+                
+        except Exception as e:
+            print(f"Lỗi mạng cục bộ AWS (Lần {attempt+1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                # Ngủ với thời gian tăng dần: 1s, 2s, 4s, 8s...
+                sleep_time = 2 ** attempt 
+                print(f"⏳ Nghỉ {sleep_time} giây để DNS AWS phục hồi...")
+                time.sleep(sleep_time)
+            else:
+                print(" Đã thử 5 lần vẫn thất bại. Chấp nhận bó tay để SQS gửi lại sau!")
+                
+    return None
 
 def lambda_handler(event, context):
     for record in event['Records']:
