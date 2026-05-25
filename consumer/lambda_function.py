@@ -6,32 +6,28 @@ from pymongo import MongoClient
 from bson.objectid import ObjectId
 from datetime import datetime
 
-# Lấy cấu hình từ biến môi trường
 MONGO_URI = os.environ.get('MONGO_URI')
 HF_TOKEN = os.environ.get('HF_TOKEN')
 HF_API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
 
-# Khởi tạo kết nối DB 
+# Khởi tạo kết nối DB
 client = MongoClient(MONGO_URI)
 db = client['horashi-api']
 collection = db['movie']
 
 def get_embedding(text):
-    # Đóng gói dữ liệu chuẩn bị gửi đi
     payload = json.dumps({"inputs": [text]}).encode('utf-8')
-    
-    # Sử dụng thư viện chuẩn của Python thay vì 'requests'
     req = urllib.request.Request(HF_API_URL, data=payload, method='POST')
     req.add_header('Authorization', f'Bearer {HF_TOKEN}')
     req.add_header('Content-Type', 'application/json')
     
     try:
-        # Gọi API với timeout 10 giây
-        with urllib.request.urlopen(req, timeout=10) as response:
+        # Tăng timeout lên 15 giây cho chắc ăn
+        with urllib.request.urlopen(req, timeout=15) as response:
             result = json.loads(response.read().decode('utf-8'))
             return result[0]
     except Exception as e:
-        print(f"Lỗi phân giải/gọi AI: {e}")
+        print(f"Lỗi gọi AI: {e}")
         return None
 
 def lambda_handler(event, context):
@@ -40,21 +36,27 @@ def lambda_handler(event, context):
         title = body['title']
         overview = body['overview']
         
+        # 1. KIỂM TRA CHỐNG TRÙNG LẶP (IDEMPOTENT)
+        # Nếu DB đã có phim này (do các lần chạy trước) thì bỏ qua luôn, không gọi AI nữa
+        if collection.find_one({"name": title}):
+            print(f"⏭️ Phim '{title}' đã có trong DB, tự động bỏ qua.")
+            continue
+        
         genres_list = json.loads(body.get('genres', '[]'))
         genre_name = genres_list[0]['name'] if len(genres_list) > 0 else "Unknown"
-        
         text_to_embed = f"Tên phim: {title}. Nội dung: {overview}"
         
-        # Gọi AI tạo Vector
+        # 2. GỌI AI VÀ NGHỈ NGƠI
         embedding = get_embedding(text_to_embed)
-        
-        # 2. NGỦ 1 GIÂY ĐỂ TRÁNH BỊ HUGGING FACE KHÓA IP
-        time.sleep(1) 
+        time.sleep(1.5) # Cố tình ngủ 1.5 giây để đánh lừa bộ chống spam của Hugging Face
         
         if not embedding:
-            print(f"❌ Bỏ qua phim '{title}' do lỗi gọi API.")
-            continue  
-        # Lưu vào MongoDB
+            # 3. QUAN TRỌNG NHẤT: BÁO LỖI ĐỂ SQS THỬ LẠI
+            # Lệnh raise này sẽ làm sập Lambda hiện tại, thông báo cho SQS biết 
+            # "Tôi chưa làm xong, đừng xóa phim này, lát gửi lại nhé!"
+            raise Exception(f"Mạng nghẽn/HF chặn IP khi xử lý '{title}'. Yêu cầu SQS retry!")
+            
+        # 4. LƯU DATABASE
         movie_doc = {
             "_id": ObjectId(),
             "name": title,
